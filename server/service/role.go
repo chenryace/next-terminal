@@ -239,7 +239,6 @@ func (s *roleService) CreateDefaultRoles() error {
 	}
 
 	var DefaultRoles = []*model.Role{
-
 		model.NewRole("system-administrator", "系统管理员", "default", false, false, s.mapRoleMenus(menus)),
 		model.NewRole("audit-administrator", "审计管理员", "default", false, false, s.mapRoleMenus(auditPermissions)),
 		model.NewRole("security-administrator", "安全管理员", "default", false, false, s.mapRoleMenus(securityPermissions)),

@@ -59,13 +59,27 @@ func (service userService) InitUser() (err error) {
 			// 修正默认用户类型为管理员
 			if users[i].Type == "" {
 				user := model.User{
-					Type: constant.TypeAdmin,
+					Type: constant.TypeUser,
 					ID:   users[i].ID,
 				}
 				if err := repository.UserRepository.Update(context.TODO(), &user); err != nil {
 					return err
 				}
-				log.Infof("自动修正用户「%v」ID「%v」类型为管理员", users[i].Nickname, users[i].ID)
+				log.Infof("自动修正用户「%v」ID「%v」类型为普通用户", users[i].Nickname, users[i].ID)
+			}
+
+			if users[i].Type == constant.TypeAdmin {
+				roles, err := RoleService.GetRolesByUserId(users[i].ID)
+				if err != nil {
+					return err
+				}
+				if len(roles) == 0 {
+					users[i].Roles = []string{"system-administrator"}
+					if err := service.saveUserRoles(context.Background(), users[i]); err != nil {
+						return err
+					}
+					log.Infof("自动修正用户「%v」ID「%v」类型为管理用户", users[i].Nickname, users[i].ID)
+				}
 			}
 		}
 	}
