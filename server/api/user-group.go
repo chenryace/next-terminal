@@ -2,6 +2,8 @@ package api
 
 import (
 	"context"
+	"next-terminal/server/common/maps"
+	"next-terminal/server/model"
 	"strconv"
 	"strings"
 
@@ -15,7 +17,7 @@ import (
 type UserGroupApi struct{}
 
 func (userGroupApi UserGroupApi) UserGroupCreateEndpoint(c echo.Context) error {
-	var item dto.UserGroup
+	var item model.UserGroup
 	if err := c.Bind(&item); err != nil {
 		return err
 	}
@@ -40,7 +42,7 @@ func (userGroupApi UserGroupApi) UserGroupPagingEndpoint(c echo.Context) error {
 		return err
 	}
 
-	return Success(c, Map{
+	return Success(c, maps.Map{
 		"total": total,
 		"items": items,
 	})
@@ -49,7 +51,7 @@ func (userGroupApi UserGroupApi) UserGroupPagingEndpoint(c echo.Context) error {
 func (userGroupApi UserGroupApi) UserGroupUpdateEndpoint(c echo.Context) error {
 	id := c.Param("id")
 
-	var item dto.UserGroup
+	var item model.UserGroup
 	if err := c.Bind(&item); err != nil {
 		return err
 	}
@@ -82,7 +84,7 @@ func (userGroupApi UserGroupApi) UserGroupGetEndpoint(c echo.Context) error {
 		return err
 	}
 
-	members, err := repository.UserGroupMemberRepository.FindUserIdsByUserGroupId(context.TODO(), id)
+	members, err := repository.UserGroupMemberRepository.FindByUserGroupId(context.TODO(), id)
 	if err != nil {
 		return err
 	}
@@ -90,8 +92,17 @@ func (userGroupApi UserGroupApi) UserGroupGetEndpoint(c echo.Context) error {
 	userGroup := dto.UserGroup{
 		Id:      item.ID,
 		Name:    item.Name,
+		Created: item.Created,
 		Members: members,
 	}
 
 	return Success(c, userGroup)
+}
+
+func (userGroupApi UserGroupApi) UserGroupAllEndpoint(c echo.Context) error {
+	userGroups, err := repository.UserGroupRepository.FindAll(context.Background())
+	if err != nil {
+		return err
+	}
+	return Success(c, userGroups)
 }

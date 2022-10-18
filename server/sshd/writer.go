@@ -2,12 +2,11 @@ package sshd
 
 import (
 	"encoding/hex"
+	"next-terminal/server/common/term"
 	"strings"
 
-	"next-terminal/server/api"
-	"next-terminal/server/term"
-
 	"github.com/gliderlabs/ssh"
+	"next-terminal/server/api"
 )
 
 type Writer struct {

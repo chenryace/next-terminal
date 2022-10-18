@@ -1,4 +1,4 @@
-import React, {Component} from 'react';
+import React, {Component, lazy, Suspense} from 'react';
 import {
     Button,
     Card,
@@ -9,7 +9,9 @@ import {
     notification,
     Popconfirm,
     Progress,
+    Skeleton,
     Space,
+    Spin,
     Table,
     Tooltip,
     Typography
@@ -37,7 +39,9 @@ import request from "../../common/request";
 import {server} from "../../common/env";
 import {download, getFileName, getToken, isEmpty, renderSize} from "../../utils/utils";
 import './FileSystem.css';
-import MonacoEditor from "react-monaco-editor";
+import Landing from "../Landing";
+
+const MonacoEditor = lazy(() => import('react-monaco-editor'));
 
 const {Text} = Typography;
 const confirm = Modal.confirm;
@@ -72,6 +76,10 @@ class FileSystem extends Component {
     componentDidMount() {
         if (this.props.onRef) {
             this.props.onRef(this);
+        }
+
+        if (!this.props.storageId) {
+            return
         }
         this.setState({
             storageId: this.props.storageId,
@@ -126,12 +134,32 @@ class FileSystem extends Component {
                 return {'key': item['path'], ...item}
             });
 
+            const sortByName = (a, b) => {
+                let a1 = a['name'].toUpperCase();
+                let a2 = b['name'].toUpperCase();
+                if (a1 < a2) {
+                    return -1;
+                }
+                if (a1 > a2) {
+                    return 1;
+                }
+                return 0;
+            }
+
+            let dirs = items.filter(item => item['isDir'] === true);
+            dirs.sort(sortByName);
+
+            let files = items.filter(item => item['isDir'] === false);
+            files.sort(sortByName);
+
+            dirs.push(...files);
+
             if (key !== '/') {
-                items.splice(0, 0, {key: '..', name: '..', path: '..', isDir: true, disabled: true})
+                dirs.splice(0, 0, {key: '..', name: '..', path: '..', isDir: true, disabled: true})
             }
 
             this.setState({
-                files: items,
+                files: dirs,
                 currentDirectory: key,
                 currentDirectoryInput: key
             })
@@ -808,27 +836,28 @@ class FileSystem extends Component {
                     confirmLoading={this.state.confirmLoading}
                     onCancel={this.hideEditor}
                 >
-                    <MonacoEditor
-                        language="javascript"
-                        height={window.innerHeight * 0.8}
-                        theme="vs-dark"
-                        value={this.state.fileContent}
-                        options={{
-                            selectOnLineNumbers: true
-                        }}
-                        editorDidMount={(editor, monaco) => {
-                            console.log('editorDidMount', editor);
-                            editor.focus();
-                        }}
-                        onChange={(newValue, e) => {
-                            console.log('onChange', newValue, e);
-                            this.setState(
-                                {
-                                    fileContent: newValue
-                                }
-                            )
-                        }}
-                    />
+                    <Suspense fallback={<Landing/>}>
+                        <MonacoEditor
+                            language="javascript"
+                            height={window.innerHeight * 0.8}
+                            theme="vs-dark"
+                            value={this.state.fileContent}
+                            options={{
+                                selectOnLineNumbers: true
+                            }}
+                            editorDidMount={(editor, monaco) => {
+                                editor.focus();
+                            }}
+                            onChange={(newValue, e) => {
+                                this.setState(
+                                    {
+                                        fileContent: newValue
+                                    }
+                                )
+                            }}
+                        />
+                    </Suspense>
+
                 </Modal>
             </div>
         );

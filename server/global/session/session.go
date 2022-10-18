@@ -1,14 +1,13 @@
 package session
 
 import (
+	"next-terminal/server/common/guacamole"
+	"next-terminal/server/common/term"
 	"sync"
 
-	"next-terminal/server/dto"
-	"next-terminal/server/guacd"
-	"next-terminal/server/log"
-	"next-terminal/server/term"
-
 	"github.com/gorilla/websocket"
+	"next-terminal/server/dto"
+	"next-terminal/server/log"
 )
 
 type Session struct {
@@ -16,7 +15,7 @@ type Session struct {
 	Protocol     string
 	Mode         string
 	WebSocket    *websocket.Conn
-	GuacdTunnel  *guacd.Tunnel
+	GuacdTunnel  *guacamole.Tunnel
 	NextTerminal *term.NextTerminal
 	Observer     *Manager
 	mutex        sync.Mutex

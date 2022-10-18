@@ -9,6 +9,7 @@ import (
 	"io/ioutil"
 	"mime/multipart"
 	"net/http"
+	"next-terminal/server/common"
 	"os"
 	"path"
 	"strconv"
@@ -102,7 +103,7 @@ func (service storageService) CreateStorageByUser(c context.Context, user *model
 		IsDefault: true,
 		LimitSize: limitSize,
 		Owner:     user.ID,
-		Created:   utils.NowJsonTime(),
+		Created:   common.NowJsonTime(),
 	}
 	storageDir := path.Join(drivePath, storage.ID)
 	if err := os.MkdirAll(storageDir, os.ModePerm); err != nil {
@@ -118,13 +119,13 @@ func (service storageService) CreateStorageByUser(c context.Context, user *model
 }
 
 type File struct {
-	Name    string         `json:"name"`
-	Path    string         `json:"path"`
-	IsDir   bool           `json:"isDir"`
-	Mode    string         `json:"mode"`
-	IsLink  bool           `json:"isLink"`
-	ModTime utils.JsonTime `json:"modTime"`
-	Size    int64          `json:"size"`
+	Name    string          `json:"name"`
+	Path    string          `json:"path"`
+	IsDir   bool            `json:"isDir"`
+	Mode    string          `json:"mode"`
+	IsLink  bool            `json:"isLink"`
+	ModTime common.JsonTime `json:"modTime"`
+	Size    int64           `json:"size"`
 }
 
 func (service storageService) Ls(drivePath, remoteDir string) ([]File, error) {
@@ -141,7 +142,7 @@ func (service storageService) Ls(drivePath, remoteDir string) ([]File, error) {
 			IsDir:   fileInfos[i].IsDir(),
 			Mode:    fileInfos[i].Mode().String(),
 			IsLink:  fileInfos[i].Mode()&os.ModeSymlink == os.ModeSymlink,
-			ModTime: utils.NewJsonTime(fileInfos[i].ModTime()),
+			ModTime: common.NewJsonTime(fileInfos[i].ModTime()),
 			Size:    fileInfos[i].Size(),
 		}
 

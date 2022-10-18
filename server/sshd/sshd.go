@@ -8,6 +8,7 @@ import (
 	"net"
 	"strings"
 
+	"next-terminal/server/branding"
 	"next-terminal/server/config"
 	"next-terminal/server/constant"
 	"next-terminal/server/global/security"
@@ -131,7 +132,7 @@ func (sshd sshd) sessionHandler(sess *ssh.Session) {
 
 func (sshd sshd) Serve() {
 	ssh.Handle(func(s ssh.Session) {
-		_, _ = io.WriteString(s, fmt.Sprintf(constant.AppBanner, constant.AppVersion))
+		_, _ = io.WriteString(s, branding.Hi)
 		sshd.sessionHandler(&s)
 	})
 

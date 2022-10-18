@@ -3,6 +3,8 @@ package api
 import (
 	"context"
 	"errors"
+	"next-terminal/server/common"
+	"next-terminal/server/common/maps"
 	"os"
 	"path"
 	"strconv"
@@ -44,7 +46,7 @@ func (api StorageApi) StoragePagingEndpoint(c echo.Context) error {
 		}
 	}
 
-	return Success(c, Map{
+	return Success(c, maps.Map{
 		"total": total,
 		"items": items,
 	})
@@ -59,7 +61,7 @@ func (api StorageApi) StorageCreateEndpoint(c echo.Context) error {
 	account, _ := GetCurrentAccount(c)
 
 	item.ID = utils.UUID()
-	item.Created = utils.NowJsonTime()
+	item.Created = common.NowJsonTime()
 	item.Owner = account.ID
 	// 创建对应的目录文件夹
 	drivePath := service.StorageService.GetBaseDrivePath()

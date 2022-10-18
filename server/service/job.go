@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"next-terminal/server/common"
 
 	"next-terminal/server/constant"
 	"next-terminal/server/global/cron"
@@ -82,8 +83,8 @@ func (r jobService) InitJob() error {
 			Cron:    "0 0/10 * * * ?",
 			Mode:    constant.JobModeAll,
 			Status:  constant.JobStatusRunning,
-			Created: utils.NowJsonTime(),
-			Updated: utils.NowJsonTime(),
+			Created: common.NowJsonTime(),
+			Updated: common.NowJsonTime(),
 		}
 		if err := repository.JobRepository.Create(context.TODO(), &job); err != nil {
 			return err

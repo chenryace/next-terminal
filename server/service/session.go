@@ -4,6 +4,10 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"next-terminal/server/common"
+	"next-terminal/server/common/guacamole"
+	"os"
+	"path"
 	"strconv"
 	"sync"
 
@@ -11,7 +15,6 @@ import (
 	"next-terminal/server/constant"
 	"next-terminal/server/env"
 	"next-terminal/server/global/session"
-	"next-terminal/server/guacd"
 	"next-terminal/server/log"
 	"next-terminal/server/model"
 	"next-terminal/server/repository"
@@ -34,7 +37,7 @@ func (service sessionService) FixSessionState() error {
 		for i := range sessions {
 			s := model.Session{
 				Status:           constant.Disconnected,
-				DisconnectedTime: utils.NowJsonTime(),
+				DisconnectedTime: common.NowJsonTime(),
 			}
 
 			_ = repository.SessionRepository.UpdateById(context.TODO(), &s, sessions[i].ID)
@@ -56,7 +59,23 @@ func (service sessionService) ClearOfflineSession() error {
 	for i := range sessions {
 		sessionIds = append(sessionIds, sessions[i].ID)
 	}
-	return repository.SessionRepository.DeleteByIds(context.TODO(), sessionIds)
+	return service.DeleteByIds(context.TODO(), sessionIds)
+}
+
+func (service sessionService) DeleteByIds(c context.Context, sessionIds []string) error {
+	recordingPath := config.GlobalCfg.Guacd.Recording
+	for i := range sessionIds {
+		if err := os.RemoveAll(path.Join(recordingPath, sessionIds[i])); err != nil {
+			return err
+		}
+		if err := repository.SessionRepository.DeleteById(c, sessionIds[i]); err != nil {
+			return err
+		}
+		if err := repository.SessionCommandRepository.DeleteBySessionId(c, sessionIds[i]); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func (service sessionService) ReviewedAll() error {
@@ -110,9 +129,9 @@ func (service sessionService) CloseSessionById(sessionId string, code int, reaso
 func (service sessionService) WriteCloseMessage(sess *session.Session, mode string, code int, reason string) {
 	switch mode {
 	case constant.Guacd:
-		err := guacd.NewInstruction("error", "", strconv.Itoa(code))
+		err := guacamole.NewInstruction("error", "", strconv.Itoa(code))
 		_ = sess.WriteString(err.String())
-		disconnect := guacd.NewInstruction("disconnect")
+		disconnect := guacamole.NewInstruction("disconnect")
 		_ = sess.WriteString(disconnect.String())
 	case constant.Native, constant.Terminal:
 		msg := `0` + reason
@@ -129,7 +148,7 @@ func (service sessionService) DisDBSess(sessionId string, code int, reason strin
 		}
 
 		if s.Status == constant.Disconnected {
-			return err
+			return nil
 		}
 
 		if s.Status == constant.Connecting {
@@ -143,12 +162,17 @@ func (service sessionService) DisDBSess(sessionId string, code int, reason strin
 		ss := model.Session{}
 		ss.ID = sessionId
 		ss.Status = constant.Disconnected
-		ss.DisconnectedTime = utils.NowJsonTime()
+		ss.DisconnectedTime = common.NowJsonTime()
 		ss.Code = code
 		ss.Message = reason
 		ss.Password = "-"
 		ss.PrivateKey = "-"
 		ss.Passphrase = "-"
+
+		count, err := repository.SessionCommandRepository.CountBySessionId(context.Background(), sessionId)
+		if err == nil {
+			ss.CommandCount = count
+		}
 
 		if err := repository.SessionRepository.UpdateById(c, &ss, sessionId); err != nil {
 			return err
@@ -206,6 +230,13 @@ func (service sessionService) Decrypt(item *model.Session) error {
 	return nil
 }
 
+func (service sessionService) renderBoolToStr(b *bool) string {
+	if *(b) == true {
+		return "1"
+	}
+	return "0"
+}
+
 func (service sessionService) Create(clientIp, assetId, mode string, user *model.User) (*model.Session, error) {
 	asset, err := repository.AssetRepository.FindById(context.TODO(), assetId)
 	if err != nil {
@@ -225,14 +256,15 @@ func (service sessionService) Create(clientIp, assetId, mode string, user *model
 
 	if asset.Owner != user.ID && constant.TypeUser == user.Type {
 		// 普通用户访问非自己创建的资产需要校验权限
-		resourceSharers, err := repository.ResourceSharerRepository.FindByResourceIdAndUserId(context.TODO(), assetId, user.ID)
+		authorised, err := AuthorisedService.GetAuthorised(user.ID, assetId)
 		if err != nil {
 			return nil, err
 		}
-		if len(resourceSharers) == 0 {
+
+		if authorised == nil || authorised.ID == "" {
 			return nil, errors.New("您没有权限访问此资产")
 		}
-		strategyId := resourceSharers[0].StrategyId
+		strategyId := authorised.StrategyId
 		if strategyId != "" {
 			strategy, err := repository.StrategyRepository.FindById(context.TODO(), strategyId)
 			if err != nil {
@@ -240,13 +272,13 @@ func (service sessionService) Create(clientIp, assetId, mode string, user *model
 					return nil, err
 				}
 			} else {
-				upload = strategy.Upload
-				download = strategy.Download
-				_delete = strategy.Delete
-				rename = strategy.Rename
-				edit = strategy.Edit
-				_copy = strategy.Copy
-				paste = strategy.Paste
+				upload = service.renderBoolToStr(strategy.Upload)
+				download = service.renderBoolToStr(strategy.Download)
+				_delete = service.renderBoolToStr(strategy.Delete)
+				rename = service.renderBoolToStr(strategy.Rename)
+				edit = service.renderBoolToStr(strategy.Edit)
+				_copy = service.renderBoolToStr(strategy.Copy)
+				paste = service.renderBoolToStr(strategy.Paste)
 			}
 		}
 	}
@@ -257,9 +289,9 @@ func (service sessionService) Create(clientIp, assetId, mode string, user *model
 		if err != nil {
 			return nil, err
 		}
-		if "true" == attr[guacd.EnableDrive] {
+		if "true" == attr[guacamole.EnableDrive] {
 			fileSystem = "1"
-			storageId = attr[guacd.DrivePath]
+			storageId = attr[guacamole.DrivePath]
 			if storageId == "" {
 				storageId = user.ID
 			}

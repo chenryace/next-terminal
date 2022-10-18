@@ -2,6 +2,7 @@ package repository
 
 import (
 	"context"
+	"next-terminal/server/dto"
 	"time"
 
 	"next-terminal/server/model"
@@ -83,4 +84,19 @@ func (r loginLogRepository) FindById(c context.Context, id string) (o model.Logi
 
 func (r loginLogRepository) Update(c context.Context, o *model.LoginLog) error {
 	return r.GetDB(c).Updates(o).Error
+}
+
+func (r loginLogRepository) CountByState(c context.Context, state string) (total int64, err error) {
+	err = r.GetDB(c).Where("state = ?", state).Find(&model.LoginLog{}).Count(&total).Error
+	return
+}
+
+func (r loginLogRepository) CountWithGroupByLoginTime(c context.Context, loginTime time.Time) (counter []dto.DateCounter, err error) {
+	err = r.GetDB(c).Table("login_logs").Select("date(login_time) as date, count(id) as value").Where("login_time > ?", loginTime).Group("date(login_time)").Scan(&counter).Error
+	return
+}
+
+func (r loginLogRepository) CountWithGroupByLoginTimeAndUsername(c context.Context, loginTime time.Time) (counter []dto.DateCounter, err error) {
+	err = r.GetDB(c).Table("login_logs").Select("date(login_time) as date, count(distinct(username)) as value").Where("login_time > ?", loginTime).Group("date(login_time), username").Scan(&counter).Error
+	return
 }

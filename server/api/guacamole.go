@@ -4,13 +4,13 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"next-terminal/server/common/guacamole"
 	"path"
 	"strconv"
 
 	"next-terminal/server/config"
 	"next-terminal/server/constant"
 	"next-terminal/server/global/session"
-	"next-terminal/server/guacd"
 	"next-terminal/server/log"
 	"next-terminal/server/model"
 	"next-terminal/server/repository"
@@ -34,6 +34,8 @@ const (
 )
 
 var UpGrader = websocket.Upgrader{
+	ReadBufferSize:  4096,
+	WriteBufferSize: 4096,
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
@@ -58,7 +60,7 @@ func (api GuacamoleApi) Guacamole(c echo.Context) error {
 	intWidth, _ := strconv.Atoi(width)
 	intHeight, _ := strconv.Atoi(height)
 
-	configuration := guacd.NewConfiguration()
+	configuration := guacamole.NewConfiguration()
 
 	propertyMap := repository.PropertyRepository.FindAllMap(ctx)
 
@@ -74,14 +76,14 @@ func (api GuacamoleApi) Guacamole(c echo.Context) error {
 	if s.AccessGatewayId != "" && s.AccessGatewayId != "-" {
 		g, err := service.GatewayService.GetGatewayById(s.AccessGatewayId)
 		if err != nil {
-			utils.Disconnect(ws, AccessGatewayUnAvailable, "获取接入网关失败："+err.Error())
+			guacamole.Disconnect(ws, AccessGatewayUnAvailable, "获取接入网关失败："+err.Error())
 			return nil
 		}
 
 		defer g.CloseSshTunnel(s.ID)
 		exposedIP, exposedPort, err := g.OpenSshTunnel(s.ID, s.IP, s.Port)
 		if err != nil {
-			utils.Disconnect(ws, AccessGatewayCreateError, "创建SSH隧道失败："+err.Error())
+			guacamole.Disconnect(ws, AccessGatewayCreateError, "创建SSH隧道失败："+err.Error())
 			return nil
 		}
 		s.IP = exposedIP
@@ -110,9 +112,9 @@ func (api GuacamoleApi) Guacamole(c echo.Context) error {
 	asset := fmt.Sprintf("%s:%s", configuration.GetParameter("hostname"), configuration.GetParameter("port"))
 	log.Debugf("[%v] 新建 guacd 会话, guacd=%v, asset=%v", sessionId, addr, asset)
 
-	guacdTunnel, err := guacd.NewTunnel(addr, configuration)
+	guacdTunnel, err := guacamole.NewTunnel(addr, configuration)
 	if err != nil {
-		utils.Disconnect(ws, NewTunnelError, err.Error())
+		guacamole.Disconnect(ws, NewTunnelError, err.Error())
 		log.Printf("[%v] 建立连接失败: %v", sessionId, err.Error())
 		return err
 	}
@@ -128,7 +130,7 @@ func (api GuacamoleApi) Guacamole(c echo.Context) error {
 	if configuration.Protocol == constant.SSH {
 		nextTerminal, err := CreateNextTerminalBySession(s)
 		if err != nil {
-			utils.Disconnect(ws, NewSshClientError, "建立SSH客户端失败: "+err.Error())
+			guacamole.Disconnect(ws, NewSshClientError, "建立SSH客户端失败: "+err.Error())
 			log.Printf("[%v] 建立 ssh 客户端失败: %v", sessionId, err.Error())
 			return err
 		}
@@ -142,7 +144,7 @@ func (api GuacamoleApi) Guacamole(c echo.Context) error {
 		Width:        intWidth,
 		Height:       intHeight,
 		Status:       constant.Connecting,
-		Recording:    configuration.GetParameter(guacd.RecordingPath),
+		Recording:    configuration.GetParameter(guacamole.RecordingPath),
 	}
 	if sess.Recording == "" {
 		// 未录屏时无需审计
@@ -176,22 +178,22 @@ func (api GuacamoleApi) Guacamole(c echo.Context) error {
 	}
 }
 
-func (api GuacamoleApi) setAssetConfig(attributes map[string]string, s model.Session, configuration *guacd.Configuration) {
+func (api GuacamoleApi) setAssetConfig(attributes map[string]string, s model.Session, configuration *guacamole.Configuration) {
 	for key, value := range attributes {
-		if guacd.DrivePath == key {
+		if guacamole.DrivePath == key {
 			// 忽略该参数
 			continue
 		}
-		if guacd.EnableDrive == key && value == "true" {
-			storageId := attributes[guacd.DrivePath]
+		if guacamole.EnableDrive == key && value == "true" {
+			storageId := attributes[guacamole.DrivePath]
 			if storageId == "" || storageId == "-" {
 				// 默认空间ID和用户ID相同
 				storageId = s.Creator
 			}
 			realPath := path.Join(service.StorageService.GetBaseDrivePath(), storageId)
-			configuration.SetParameter(guacd.EnableDrive, "true")
-			configuration.SetParameter(guacd.DriveName, "Filesystem")
-			configuration.SetParameter(guacd.DrivePath, realPath)
+			configuration.SetParameter(guacamole.EnableDrive, "true")
+			configuration.SetParameter(guacamole.DriveName, "Filesystem")
+			configuration.SetParameter(guacamole.DrivePath, realPath)
 			log.Debugf("[%v] 会话 %v:%v 映射目录地址为 %v", s.ID, s.IP, s.Port, realPath)
 		} else {
 			configuration.SetParameter(key, value)
@@ -213,11 +215,11 @@ func (api GuacamoleApi) GuacamoleMonitor(c echo.Context) error {
 		return err
 	}
 	if s.Status != constant.Connected {
-		utils.Disconnect(ws, AssetNotActive, "会话离线")
+		guacamole.Disconnect(ws, AssetNotActive, "会话离线")
 		return nil
 	}
 	connectionId := s.ConnectionId
-	configuration := guacd.NewConfiguration()
+	configuration := guacamole.NewConfiguration()
 	configuration.ConnectionID = connectionId
 	sessionId = s.ID
 	configuration.SetParameter("width", strconv.Itoa(s.Width))
@@ -228,9 +230,9 @@ func (api GuacamoleApi) GuacamoleMonitor(c echo.Context) error {
 	asset := fmt.Sprintf("%s:%s", configuration.GetParameter("hostname"), configuration.GetParameter("port"))
 	log.Debugf("[%v] 新建 guacd 会话, guacd=%v, asset=%v", sessionId, addr, asset)
 
-	guacdTunnel, err := guacd.NewTunnel(addr, configuration)
+	guacdTunnel, err := guacamole.NewTunnel(addr, configuration)
 	if err != nil {
-		utils.Disconnect(ws, NewTunnelError, err.Error())
+		guacamole.Disconnect(ws, NewTunnelError, err.Error())
 		log.Printf("[%v] 建立连接失败: %v", sessionId, err.Error())
 		return err
 	}
@@ -246,7 +248,7 @@ func (api GuacamoleApi) GuacamoleMonitor(c echo.Context) error {
 	// 要监控会话
 	forObsSession := session.GlobalSessionManager.GetById(sessionId)
 	if forObsSession == nil {
-		utils.Disconnect(ws, NotFoundSession, "获取会话失败")
+		guacamole.Disconnect(ws, NotFoundSession, "获取会话失败")
 		return nil
 	}
 	nextSession.ID = utils.UUID()
@@ -277,12 +279,12 @@ func (api GuacamoleApi) GuacamoleMonitor(c echo.Context) error {
 	}
 }
 
-func (api GuacamoleApi) setConfig(propertyMap map[string]string, s model.Session, configuration *guacd.Configuration) {
-	if propertyMap[guacd.EnableRecording] == "true" {
-		configuration.SetParameter(guacd.RecordingPath, path.Join(config.GlobalCfg.Guacd.Recording, s.ID))
-		configuration.SetParameter(guacd.CreateRecordingPath, "true")
+func (api GuacamoleApi) setConfig(propertyMap map[string]string, s model.Session, configuration *guacamole.Configuration) {
+	if propertyMap[guacamole.EnableRecording] == "true" {
+		configuration.SetParameter(guacamole.RecordingPath, path.Join(config.GlobalCfg.Guacd.Recording, s.ID))
+		configuration.SetParameter(guacamole.CreateRecordingPath, "true")
 	} else {
-		configuration.SetParameter(guacd.RecordingPath, "")
+		configuration.SetParameter(guacamole.RecordingPath, "")
 	}
 
 	configuration.Protocol = s.Protocol
@@ -295,18 +297,18 @@ func (api GuacamoleApi) setConfig(propertyMap map[string]string, s model.Session
 		configuration.SetParameter("ignore-cert", "true")
 		configuration.SetParameter("create-drive-path", "true")
 		configuration.SetParameter("resize-method", "reconnect")
-		configuration.SetParameter(guacd.EnableWallpaper, propertyMap[guacd.EnableWallpaper])
-		configuration.SetParameter(guacd.EnableTheming, propertyMap[guacd.EnableTheming])
-		configuration.SetParameter(guacd.EnableFontSmoothing, propertyMap[guacd.EnableFontSmoothing])
-		configuration.SetParameter(guacd.EnableFullWindowDrag, propertyMap[guacd.EnableFullWindowDrag])
-		configuration.SetParameter(guacd.EnableDesktopComposition, propertyMap[guacd.EnableDesktopComposition])
-		configuration.SetParameter(guacd.EnableMenuAnimations, propertyMap[guacd.EnableMenuAnimations])
-		configuration.SetParameter(guacd.DisableBitmapCaching, propertyMap[guacd.DisableBitmapCaching])
-		configuration.SetParameter(guacd.DisableOffscreenCaching, propertyMap[guacd.DisableOffscreenCaching])
-		configuration.SetParameter(guacd.ColorDepth, propertyMap[guacd.ColorDepth])
-		configuration.SetParameter(guacd.ForceLossless, propertyMap[guacd.ForceLossless])
-		configuration.SetParameter(guacd.PreConnectionId, propertyMap[guacd.PreConnectionId])
-		configuration.SetParameter(guacd.PreConnectionBlob, propertyMap[guacd.PreConnectionBlob])
+		configuration.SetParameter(guacamole.EnableWallpaper, propertyMap[guacamole.EnableWallpaper])
+		configuration.SetParameter(guacamole.EnableTheming, propertyMap[guacamole.EnableTheming])
+		configuration.SetParameter(guacamole.EnableFontSmoothing, propertyMap[guacamole.EnableFontSmoothing])
+		configuration.SetParameter(guacamole.EnableFullWindowDrag, propertyMap[guacamole.EnableFullWindowDrag])
+		configuration.SetParameter(guacamole.EnableDesktopComposition, propertyMap[guacamole.EnableDesktopComposition])
+		configuration.SetParameter(guacamole.EnableMenuAnimations, propertyMap[guacamole.EnableMenuAnimations])
+		configuration.SetParameter(guacamole.DisableBitmapCaching, propertyMap[guacamole.DisableBitmapCaching])
+		configuration.SetParameter(guacamole.DisableOffscreenCaching, propertyMap[guacamole.DisableOffscreenCaching])
+		configuration.SetParameter(guacamole.ColorDepth, propertyMap[guacamole.ColorDepth])
+		configuration.SetParameter(guacamole.ForceLossless, propertyMap[guacamole.ForceLossless])
+		configuration.SetParameter(guacamole.PreConnectionId, propertyMap[guacamole.PreConnectionId])
+		configuration.SetParameter(guacamole.PreConnectionBlob, propertyMap[guacamole.PreConnectionBlob])
 	case "ssh":
 		if len(s.PrivateKey) > 0 && s.PrivateKey != "-" {
 			configuration.SetParameter("username", s.Username)
@@ -317,11 +319,11 @@ func (api GuacamoleApi) setConfig(propertyMap map[string]string, s model.Session
 			configuration.SetParameter("password", s.Password)
 		}
 
-		configuration.SetParameter(guacd.FontSize, propertyMap[guacd.FontSize])
-		configuration.SetParameter(guacd.FontName, propertyMap[guacd.FontName])
-		configuration.SetParameter(guacd.ColorScheme, propertyMap[guacd.ColorScheme])
-		configuration.SetParameter(guacd.Backspace, propertyMap[guacd.Backspace])
-		configuration.SetParameter(guacd.TerminalType, propertyMap[guacd.TerminalType])
+		configuration.SetParameter(guacamole.FontSize, propertyMap[guacamole.FontSize])
+		configuration.SetParameter(guacamole.FontName, propertyMap[guacamole.FontName])
+		configuration.SetParameter(guacamole.ColorScheme, propertyMap[guacamole.ColorScheme])
+		configuration.SetParameter(guacamole.Backspace, propertyMap[guacamole.Backspace])
+		configuration.SetParameter(guacamole.TerminalType, propertyMap[guacamole.TerminalType])
 	case "vnc":
 		configuration.SetParameter("username", s.Username)
 		configuration.SetParameter("password", s.Password)
@@ -329,17 +331,17 @@ func (api GuacamoleApi) setConfig(propertyMap map[string]string, s model.Session
 		configuration.SetParameter("username", s.Username)
 		configuration.SetParameter("password", s.Password)
 
-		configuration.SetParameter(guacd.FontSize, propertyMap[guacd.FontSize])
-		configuration.SetParameter(guacd.FontName, propertyMap[guacd.FontName])
-		configuration.SetParameter(guacd.ColorScheme, propertyMap[guacd.ColorScheme])
-		configuration.SetParameter(guacd.Backspace, propertyMap[guacd.Backspace])
-		configuration.SetParameter(guacd.TerminalType, propertyMap[guacd.TerminalType])
+		configuration.SetParameter(guacamole.FontSize, propertyMap[guacamole.FontSize])
+		configuration.SetParameter(guacamole.FontName, propertyMap[guacamole.FontName])
+		configuration.SetParameter(guacamole.ColorScheme, propertyMap[guacamole.ColorScheme])
+		configuration.SetParameter(guacamole.Backspace, propertyMap[guacamole.Backspace])
+		configuration.SetParameter(guacamole.TerminalType, propertyMap[guacamole.TerminalType])
 	case "kubernetes":
-		configuration.SetParameter(guacd.FontSize, propertyMap[guacd.FontSize])
-		configuration.SetParameter(guacd.FontName, propertyMap[guacd.FontName])
-		configuration.SetParameter(guacd.ColorScheme, propertyMap[guacd.ColorScheme])
-		configuration.SetParameter(guacd.Backspace, propertyMap[guacd.Backspace])
-		configuration.SetParameter(guacd.TerminalType, propertyMap[guacd.TerminalType])
+		configuration.SetParameter(guacamole.FontSize, propertyMap[guacamole.FontSize])
+		configuration.SetParameter(guacamole.FontName, propertyMap[guacamole.FontName])
+		configuration.SetParameter(guacamole.ColorScheme, propertyMap[guacamole.ColorScheme])
+		configuration.SetParameter(guacamole.Backspace, propertyMap[guacamole.Backspace])
+		configuration.SetParameter(guacamole.TerminalType, propertyMap[guacamole.TerminalType])
 	default:
 
 	}

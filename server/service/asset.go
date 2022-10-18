@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"next-terminal/server/common"
 
 	"next-terminal/server/config"
 	"next-terminal/server/constant"
@@ -148,39 +149,22 @@ func (s assetService) Create(ctx context.Context, m echo.Map) (model.Asset, erro
 	}
 
 	item.ID = utils.UUID()
-	item.Created = utils.NowJsonTime()
+	item.Created = common.NowJsonTime()
 	item.Active = true
 
-	if s.InTransaction(ctx) {
-		return item, s.create(ctx, item, m)
-	} else {
-		return item, env.GetDB().Transaction(func(tx *gorm.DB) error {
-			c := s.Context(tx)
-			return s.create(c, item, m)
-		})
-	}
-}
+	return item, s.Transaction(ctx, func(ctx context.Context) error {
+		if err := s.Encrypt(&item, config.GlobalCfg.EncryptionPassword); err != nil {
+			return err
+		}
+		if err := repository.AssetRepository.Create(ctx, &item); err != nil {
+			return err
+		}
 
-func (s assetService) create(c context.Context, item model.Asset, m echo.Map) error {
-	if err := s.Encrypt(&item, config.GlobalCfg.EncryptionPassword); err != nil {
-		return err
-	}
-	if err := repository.AssetRepository.Create(c, &item); err != nil {
-		return err
-	}
-
-	if err := repository.AssetRepository.UpdateAttributes(c, item.ID, item.Protocol, m); err != nil {
-		return err
-	}
-
-	//go func() {
-	//	active, _ := s.CheckStatus(item.AccessGatewayId, item.IP, item.Port)
-	//
-	//	if item.Active != active {
-	//		_ = repository.AssetRepository.UpdateActiveById(context.TODO(), active, item.id)
-	//	}
-	//}()
-	return nil
+		if err := repository.AssetRepository.UpdateAttributes(ctx, item.ID, item.Protocol, m); err != nil {
+			return err
+		}
+		return nil
+	})
 }
 
 func (s assetService) DeleteById(id string) error {
@@ -195,7 +179,7 @@ func (s assetService) DeleteById(id string) error {
 			return err
 		}
 		// 删除资产与用户的关系
-		if err := repository.ResourceSharerRepository.DeleteByResourceId(c, id); err != nil {
+		if err := repository.AuthorisedRepository.DeleteByAssetId(c, id); err != nil {
 			return err
 		}
 		return nil

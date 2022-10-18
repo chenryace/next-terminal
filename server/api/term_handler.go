@@ -1,16 +1,16 @@
 package api
 
 import (
+	"bytes"
 	"context"
 	"sync"
 	"time"
 	"unicode/utf8"
 
+	"github.com/gorilla/websocket"
+	"next-terminal/server/common/term"
 	"next-terminal/server/dto"
 	"next-terminal/server/global/session"
-	"next-terminal/server/term"
-
-	"github.com/gorilla/websocket"
 )
 
 type TermHandler struct {
@@ -23,12 +23,16 @@ type TermHandler struct {
 	dataChan     chan rune
 	tick         *time.Ticker
 	mutex        sync.Mutex
+	buf          bytes.Buffer
+	termParser   *TermParser
 }
 
-func NewTermHandler(sessionId string, isRecording bool, ws *websocket.Conn, nextTerminal *term.NextTerminal) *TermHandler {
+func NewTermHandler(userId, assetId, sessionId string, isRecording bool, ws *websocket.Conn, nextTerminal *term.NextTerminal) *TermHandler {
 	ctx, cancel := context.WithCancel(context.Background())
 	tick := time.NewTicker(time.Millisecond * time.Duration(60))
+
 	return &TermHandler{
+		termParser:   NewTermParser(userId, assetId, sessionId),
 		sessionId:    sessionId,
 		isRecording:  isRecording,
 		webSocket:    ws,
@@ -43,11 +47,14 @@ func NewTermHandler(sessionId string, isRecording bool, ws *websocket.Conn, next
 func (r *TermHandler) Start() {
 	go r.readFormTunnel()
 	go r.writeToWebsocket()
+	go r.termParser.StartCommandRecorder()
 }
 
 func (r *TermHandler) Stop() {
+	// 会话结束时记录最后一个命令
 	r.tick.Stop()
 	r.cancel()
+	r.termParser.StopCommandRecorder()
 }
 
 func (r *TermHandler) readFormTunnel() {
@@ -68,38 +75,61 @@ func (r *TermHandler) readFormTunnel() {
 }
 
 func (r *TermHandler) writeToWebsocket() {
-	var buf []byte
 	for {
 		select {
 		case <-r.ctx.Done():
 			return
 		case <-r.tick.C:
-			if len(buf) > 0 {
-				s := string(buf)
-				if err := r.WriteMessage(dto.NewMessage(Data, s)); err != nil {
-					return
-				}
-				// 录屏
-				if r.isRecording {
-					_ = r.nextTerminal.Recorder.WriteData(s)
-				}
-				// 监控
-				SendObData(r.sessionId, s)
-				buf = []byte{}
+			s := r.buf.String()
+			if err := r.SendMessageToWebSocket(dto.NewMessage(Data, s)); err != nil {
+				return
 			}
+			// 录屏
+			if r.isRecording {
+				_ = r.nextTerminal.Recorder.WriteData(s)
+			}
+			// 监控
+			SendObData(r.sessionId, s)
+			r.buf.Reset()
 		case data := <-r.dataChan:
 			if data != utf8.RuneError {
 				p := make([]byte, utf8.RuneLen(data))
 				utf8.EncodeRune(p, data)
-				buf = append(buf, p...)
+				r.buf.Write(p)
+
+				// 解析命令
+				r.termParser.Write(p)
 			} else {
-				buf = append(buf, []byte("@")...)
+				r.buf.Write([]byte("@"))
 			}
 		}
 	}
 }
 
-func (r *TermHandler) WriteMessage(msg dto.Message) error {
+func (r *TermHandler) Write(input []byte) error {
+	m, frontendMsg, cleanMsg := r.termParser.MatchForbiddenCommand(input)
+	if m {
+		// 返回禁止执行信息
+		_ = r.SendMessageToWebSocket(dto.NewMessage(Data, frontendMsg))
+		// 清空用户输入的命令
+		_, _ = r.nextTerminal.Write(cleanMsg)
+		return nil
+	}
+	// 正常的字符输入
+	_, err := r.nextTerminal.Write(input)
+	return err
+}
+
+func (r *TermHandler) WindowChange(h int, w int) error {
+	return r.nextTerminal.WindowChange(h, w)
+}
+
+func (r *TermHandler) SendRequest() error {
+	_, _, err := r.nextTerminal.SshClient.Conn.SendRequest("helloworld1024@foxmail.com", true, nil)
+	return err
+}
+
+func (r *TermHandler) SendMessageToWebSocket(msg dto.Message) error {
 	if r.webSocket == nil {
 		return nil
 	}

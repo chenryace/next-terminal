@@ -4,20 +4,19 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"errors"
 	"path"
 	"strconv"
 
+	"next-terminal/server/common/guacamole"
+	"next-terminal/server/common/term"
 	"next-terminal/server/config"
 	"next-terminal/server/constant"
 	"next-terminal/server/dto"
 	"next-terminal/server/global/session"
-	"next-terminal/server/guacd"
 	"next-terminal/server/log"
 	"next-terminal/server/model"
 	"next-terminal/server/repository"
 	"next-terminal/server/service"
-	"next-terminal/server/term"
 	"next-terminal/server/utils"
 
 	"github.com/gorilla/websocket"
@@ -86,7 +85,7 @@ func (api WebTerminalApi) SshEndpoint(c echo.Context) error {
 
 	recording := ""
 	var isRecording = false
-	property, err := repository.PropertyRepository.FindByName(ctx, guacd.EnableRecording)
+	property, err := repository.PropertyRepository.FindByName(ctx, guacamole.EnableRecording)
 	if err == nil && property.Value == "true" {
 		isRecording = true
 	}
@@ -120,20 +119,20 @@ func (api WebTerminalApi) SshEndpoint(c echo.Context) error {
 		return err
 	}
 
-	sess := model.Session{
+	sessionForUpdate := model.Session{
 		ConnectionId: sessionId,
 		Width:        cols,
 		Height:       rows,
 		Status:       constant.Connecting,
 		Recording:    recording,
 	}
-	if sess.Recording == "" {
+	if sessionForUpdate.Recording == "" {
 		// 未录屏时无需审计
-		sess.Reviewed = true
+		sessionForUpdate.Reviewed = true
 	}
 	// 创建新会话
-	log.Debugf("创建新会话 %v", sess.ConnectionId)
-	if err := repository.SessionRepository.UpdateById(ctx, &sess, sessionId); err != nil {
+	log.Debugf("创建新会话 %v", sessionForUpdate.ConnectionId)
+	if err := repository.SessionRepository.UpdateById(ctx, &sessionForUpdate, sessionId); err != nil {
 		return err
 	}
 
@@ -152,7 +151,7 @@ func (api WebTerminalApi) SshEndpoint(c echo.Context) error {
 	}
 	session.GlobalSessionManager.Add(nextSession)
 
-	termHandler := NewTermHandler(sessionId, isRecording, ws, nextTerminal)
+	termHandler := NewTermHandler(s.Creator, s.AssetId, sessionId, isRecording, ws, nextTerminal)
 	termHandler.Start()
 	defer termHandler.Stop()
 
@@ -184,22 +183,22 @@ func (api WebTerminalApi) SshEndpoint(c echo.Context) error {
 				log.Warnf("解析SSH会话窗口大小失败: %v，原始字符串：%v", err, msg.Content)
 				continue
 			}
-			if err := nextTerminal.WindowChange(winSize.Rows, winSize.Cols); err != nil {
+			if err := termHandler.WindowChange(winSize.Rows, winSize.Cols); err != nil {
 				log.Warnf("更改SSH会话窗口大小失败: %v", err)
 			}
 			_ = repository.SessionRepository.UpdateWindowSizeById(ctx, winSize.Rows, winSize.Cols, sessionId)
 		case Data:
 			input := []byte(msg.Content)
-			_, err := nextTerminal.Write(input)
+			err := termHandler.Write(input)
 			if err != nil {
 				service.SessionService.CloseSessionById(sessionId, TunnelClosed, "远程连接已关闭")
 			}
 		case Ping:
-			_, _, err := nextTerminal.SshClient.Conn.SendRequest("helloworld1024@foxmail.com", true, nil)
+			err := termHandler.SendRequest()
 			if err != nil {
 				service.SessionService.CloseSessionById(sessionId, TunnelClosed, "远程连接已关闭")
 			} else {
-				_ = termHandler.WriteMessage(dto.NewMessage(Ping, ""))
+				_ = termHandler.SendMessageToWebSocket(dto.NewMessage(Ping, ""))
 			}
 
 		}
@@ -254,15 +253,15 @@ func (api WebTerminalApi) SshMonitorEndpoint(c echo.Context) error {
 func (api WebTerminalApi) permissionCheck(c echo.Context, assetId string) error {
 	user, _ := GetCurrentAccount(c)
 	if constant.TypeUser == user.Type {
-		// 检测是否有访问权限
-		assetIds, err := repository.ResourceSharerRepository.FindAssetIdsByUserId(context.TODO(), user.ID)
-		if err != nil {
-			return err
-		}
-
-		if !utils.Contains(assetIds, assetId) {
-			return errors.New("您没有权限访问此资产")
-		}
+		// 检测是否有访问权限 TODO
+		//assetIds, err := repository.ResourceSharerRepository.FindAssetIdsByUserId(context.TODO(), user.ID)
+		//if err != nil {
+		//	return err
+		//}
+		//
+		//if !utils.Contains(assetIds, assetId) {
+		//	return errors.New("您没有权限访问此资产")
+		//}
 	}
 	return nil
 }

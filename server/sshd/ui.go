@@ -5,21 +5,23 @@ import (
 	"errors"
 	"fmt"
 	"io"
+
 	"path"
 	"strings"
 
 	"next-terminal/server/api"
+	"next-terminal/server/branding"
+	"next-terminal/server/common"
+	"next-terminal/server/common/guacamole"
+	"next-terminal/server/common/term"
 	"next-terminal/server/config"
 	"next-terminal/server/constant"
 	"next-terminal/server/global/cache"
 	"next-terminal/server/global/session"
-	"next-terminal/server/guacd"
 	"next-terminal/server/log"
 	"next-terminal/server/model"
 	"next-terminal/server/repository"
 	"next-terminal/server/service"
-	"next-terminal/server/term"
-	"next-terminal/server/totp"
 	"next-terminal/server/utils"
 
 	"github.com/gliderlabs/ssh"
@@ -31,7 +33,7 @@ type Gui struct {
 
 func (gui Gui) MainUI(sess *ssh.Session, user model.User) {
 	prompt := promptui.Select{
-		Label:  "欢迎使用 Next Terminal，请选择您要使用的功能",
+		Label:  "欢迎使用 " + branding.Name + "，请选择您要使用的功能",
 		Items:  []string{"我的资产", "退出系统"},
 		Stdin:  *sess,
 		Stdout: *sess,
@@ -209,7 +211,7 @@ func (gui Gui) handleAccessAsset(sess *ssh.Session, sessionId string) (err error
 	}
 
 	recording := ""
-	property, err := repository.PropertyRepository.FindByName(context.TODO(), guacd.EnableRecording)
+	property, err := repository.PropertyRepository.FindByName(context.TODO(), guacamole.EnableRecording)
 	if err == nil && property.Value == "true" {
 		recording = path.Join(config.GlobalCfg.Guacd.Recording, sessionId, "recording.cast")
 	}
@@ -250,7 +252,7 @@ func (gui Gui) handleAccessAsset(sess *ssh.Session, sessionId string) (err error
 	sessionForUpdate.ID = sessionId
 	sessionForUpdate.Status = constant.Connected
 	sessionForUpdate.Recording = recording
-	sessionForUpdate.ConnectedTime = utils.NowJsonTime()
+	sessionForUpdate.ConnectedTime = common.NowJsonTime()
 
 	if sessionForUpdate.Recording == "" {
 		// 未录屏时无需审计
@@ -317,7 +319,7 @@ func (gui Gui) totpUI(sess *ssh.Session, user model.User, remoteAddr string, use
 			_, _ = io.WriteString(*sess, "登录失败次数过多，请等待5分钟后再试\r\n")
 			continue
 		}
-		if !totp.Validate(result, user.TOTPSecret) {
+		if !common.Validate(result, user.TOTPSecret) {
 			count++
 			println(count)
 			cache.LoginFailedKeyManager.Set(loginFailCountKey, count, cache.LoginLockExpiration)

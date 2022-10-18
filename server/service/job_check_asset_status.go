@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"next-terminal/server/common"
 	"strings"
 	"time"
 
@@ -55,7 +56,11 @@ func (r CheckAssetStatusJob) Run() {
 				msg = fmt.Sprintf("资产「%v」存活状态检测完成，存活「%v」，耗时「%v」，原因： %v", asset.Name, active, elapsed, err.Error())
 			}
 
-			_ = repository.AssetRepository.UpdateActiveById(context.TODO(), active, asset.ID)
+			var message = ""
+			if !active && err != nil {
+				message = err.Error()
+			}
+			_ = repository.AssetRepository.UpdateActiveById(context.TODO(), active, message, asset.ID)
 			log.Infof(msg)
 			msgChan <- msg
 		}()
@@ -70,7 +75,7 @@ func (r CheckAssetStatusJob) Run() {
 	jobLog := model.JobLog{
 		ID:        utils.UUID(),
 		JobId:     r.ID,
-		Timestamp: utils.NowJsonTime(),
+		Timestamp: common.NowJsonTime(),
 		Message:   message,
 	}
 

@@ -1,21 +1,7 @@
 package constant
 
 import (
-	"next-terminal/server/guacd"
-)
-
-const (
-	AppVersion = "v1.2.7"
-	AppName    = "Next Terminal"
-	AppBanner  = `
-	_______                   __    ___________                  .__              .__
-	\      \   ____ ___  ____/  |_  \__    ___/__________  _____ |__| ____ _____  |  |
-	/   |   \_/ __ \\  \/  /\   __\   |    |_/ __ \_  __ \/     \|  |/    \\__  \ |  |
-	/    |    \  ___/ >    <  |  |     |    |\  ___/|  | \/  Y Y  \  |   |  \/ __ \|  |__
-	\____|__  /\___  >__/\_ \ |__|     |____| \___  >__|  |__|_|  /__|___|  (____  /____/
-	       \/     \/      \/                     \/            \/        \/     \/      %s
-	
-	`
+	"next-terminal/server/common/guacamole"
 )
 
 const Token = "X-Auth-Token"
@@ -78,10 +64,16 @@ const (
 	ShareSession = "share-session"
 
 	Anonymous = "anonymous"
+
+	StorageLogActionRm       = "rm"       // 删除
+	StorageLogActionUpload   = "upload"   // 上传
+	StorageLogActionDownload = "download" // 下载
+	StorageLogActionMkdir    = "mkdir"    // 创建文件夹
+	StorageLogActionRename   = "rename"   // 重命名
 )
 
-var SSHParameterNames = []string{guacd.FontName, guacd.FontSize, guacd.ColorScheme, guacd.Backspace, guacd.TerminalType, SshMode, SocksProxyEnable, SocksProxyHost, SocksProxyPort, SocksProxyUsername, SocksProxyPassword}
-var RDPParameterNames = []string{guacd.Domain, guacd.RemoteApp, guacd.RemoteAppDir, guacd.RemoteAppArgs, guacd.EnableDrive, guacd.DrivePath, guacd.ColorDepth, guacd.ForceLossless, guacd.PreConnectionId, guacd.PreConnectionBlob}
-var VNCParameterNames = []string{guacd.ColorDepth, guacd.Cursor, guacd.SwapRedBlue, guacd.DestHost, guacd.DestPort}
-var TelnetParameterNames = []string{guacd.FontName, guacd.FontSize, guacd.ColorScheme, guacd.Backspace, guacd.TerminalType, guacd.UsernameRegex, guacd.PasswordRegex, guacd.LoginSuccessRegex, guacd.LoginFailureRegex}
-var KubernetesParameterNames = []string{guacd.FontName, guacd.FontSize, guacd.ColorScheme, guacd.Backspace, guacd.TerminalType, guacd.Namespace, guacd.Pod, guacd.Container, guacd.UesSSL, guacd.ClientCert, guacd.ClientKey, guacd.CaCert, guacd.IgnoreCert}
+var SSHParameterNames = []string{guacamole.FontName, guacamole.FontSize, guacamole.ColorScheme, guacamole.Backspace, guacamole.TerminalType, SshMode, SocksProxyEnable, SocksProxyHost, SocksProxyPort, SocksProxyUsername, SocksProxyPassword}
+var RDPParameterNames = []string{guacamole.Domain, guacamole.RemoteApp, guacamole.RemoteAppDir, guacamole.RemoteAppArgs, guacamole.EnableDrive, guacamole.DrivePath, guacamole.ColorDepth, guacamole.ForceLossless, guacamole.PreConnectionId, guacamole.PreConnectionBlob}
+var VNCParameterNames = []string{guacamole.ColorDepth, guacamole.Cursor, guacamole.SwapRedBlue, guacamole.DestHost, guacamole.DestPort}
+var TelnetParameterNames = []string{guacamole.FontName, guacamole.FontSize, guacamole.ColorScheme, guacamole.Backspace, guacamole.TerminalType, guacamole.UsernameRegex, guacamole.PasswordRegex, guacamole.LoginSuccessRegex, guacamole.LoginFailureRegex}
+var KubernetesParameterNames = []string{guacamole.FontName, guacamole.FontSize, guacamole.ColorScheme, guacamole.Backspace, guacamole.TerminalType, guacamole.Namespace, guacamole.Pod, guacamole.Container, guacamole.UesSSL, guacamole.ClientCert, guacamole.ClientKey, guacamole.CaCert, guacamole.IgnoreCert}

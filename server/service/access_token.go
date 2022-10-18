@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"next-terminal/server/common"
 
 	"next-terminal/server/constant"
 	"next-terminal/server/dto"
@@ -22,18 +23,13 @@ type accessTokenService struct {
 func (service accessTokenService) GenAccessToken(userId string) error {
 	return env.GetDB().Transaction(func(tx *gorm.DB) error {
 		ctx := service.Context(tx)
+
+		if err := service.DelAccessToken(ctx, userId); err != nil {
+			return err
+		}
+
 		user, err := repository.UserRepository.FindById(ctx, userId)
 		if err != nil {
-			return err
-		}
-		oldAccessToken, err := repository.AccessTokenRepository.FindByUserId(ctx, userId)
-		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
-			return err
-		}
-		if oldAccessToken.Token != "" {
-			cache.TokenManager.Delete(oldAccessToken.Token)
-		}
-		if err := repository.AccessTokenRepository.DeleteByUserId(ctx, userId); err != nil {
 			return err
 		}
 
@@ -42,7 +38,7 @@ func (service accessTokenService) GenAccessToken(userId string) error {
 			ID:      utils.UUID(),
 			UserId:  userId,
 			Token:   token,
-			Created: utils.NowJsonTime(),
+			Created: common.NowJsonTime(),
 		}
 
 		authorization := dto.Authorization{
@@ -78,4 +74,15 @@ func (service accessTokenService) Reload() error {
 		cache.TokenManager.Set(accessToken.Token, authorization, cache.NoExpiration)
 	}
 	return nil
+}
+
+func (service accessTokenService) DelAccessToken(ctx context.Context, userId string) error {
+	oldAccessToken, err := repository.AccessTokenRepository.FindByUserId(ctx, userId)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
+	}
+	if oldAccessToken.Token != "" {
+		cache.TokenManager.Delete(oldAccessToken.Token)
+	}
+	return repository.AccessTokenRepository.DeleteByUserId(ctx, userId)
 }

@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"next-terminal/server/common"
+	"next-terminal/server/common/term"
 	"strings"
 	"time"
 
@@ -12,7 +14,6 @@ import (
 	"next-terminal/server/log"
 	"next-terminal/server/model"
 	"next-terminal/server/repository"
-	"next-terminal/server/term"
 	"next-terminal/server/utils"
 
 	"gorm.io/gorm"
@@ -116,7 +117,7 @@ func (r ShellJob) Run() {
 	jobLog := model.JobLog{
 		ID:        utils.UUID(),
 		JobId:     r.ID,
-		Timestamp: utils.NowJsonTime(),
+		Timestamp: common.NowJsonTime(),
 		Message:   message,
 	}
 

@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"next-terminal/server/common"
+	"next-terminal/server/common/maps"
 	"os"
 	"path"
 	"strconv"
@@ -63,7 +65,7 @@ func (api SessionApi) SessionPagingEndpoint(c echo.Context) error {
 		}
 	}
 
-	return Success(c, Map{
+	return Success(c, maps.Map{
 		"total": total,
 		"items": items,
 	})
@@ -71,7 +73,7 @@ func (api SessionApi) SessionPagingEndpoint(c echo.Context) error {
 
 func (api SessionApi) SessionDeleteEndpoint(c echo.Context) error {
 	sessionIds := strings.Split(c.Param("id"), ",")
-	err := repository.SessionRepository.DeleteByIds(context.TODO(), sessionIds)
+	err := service.SessionService.DeleteByIds(context.TODO(), sessionIds)
 	if err != nil {
 		return err
 	}
@@ -116,7 +118,7 @@ func (api SessionApi) SessionConnectEndpoint(c echo.Context) error {
 	s := model.Session{}
 	s.ID = sessionId
 	s.Status = constant.Connected
-	s.ConnectedTime = utils.NowJsonTime()
+	s.ConnectedTime = common.NowJsonTime()
 
 	if err := repository.SessionRepository.UpdateById(context.TODO(), &s, sessionId); err != nil {
 		return err
@@ -221,6 +223,10 @@ func (api SessionApi) SessionUploadEndpoint(c echo.Context) error {
 	remoteDir := c.QueryParam("dir")
 	remoteFile := path.Join(remoteDir, filename)
 
+	// 记录日志
+	account, _ := GetCurrentAccount(c)
+	_ = service.StorageLogService.Save(context.Background(), s.AssetId, sessionId, account.ID, constant.StorageLogActionUpload, remoteFile)
+
 	if "ssh" == s.Protocol {
 		nextSession := session.GlobalSessionManager.GetById(sessionId)
 		if nextSession == nil {
@@ -313,6 +319,11 @@ func (api SessionApi) SessionDownloadEndpoint(c echo.Context) error {
 		return errors.New("禁止操作")
 	}
 	file := c.QueryParam("file")
+
+	// 记录日志
+	account, _ := GetCurrentAccount(c)
+	_ = service.StorageLogService.Save(context.Background(), s.AssetId, sessionId, account.ID, constant.StorageLogActionDownload, file)
+
 	// 获取带后缀的文件名称
 	filenameWithSuffix := path.Base(file)
 	if "ssh" == s.Protocol {
@@ -385,7 +396,7 @@ func (api SessionApi) SessionLsEndpoint(c echo.Context) error {
 				IsDir:   fileInfos[i].IsDir(),
 				Mode:    fileInfos[i].Mode().String(),
 				IsLink:  fileInfos[i].Mode()&os.ModeSymlink == os.ModeSymlink,
-				ModTime: utils.NewJsonTime(fileInfos[i].ModTime()),
+				ModTime: common.NewJsonTime(fileInfos[i].ModTime()),
 				Size:    fileInfos[i].Size(),
 			}
 
@@ -415,6 +426,11 @@ func (api SessionApi) SessionMkDirEndpoint(c echo.Context) error {
 		return errors.New("禁止操作")
 	}
 	remoteDir := c.QueryParam("dir")
+
+	// 记录日志
+	account, _ := GetCurrentAccount(c)
+	_ = service.StorageLogService.Save(context.Background(), s.AssetId, sessionId, account.ID, constant.StorageLogActionMkdir, remoteDir)
+
 	if "ssh" == s.Protocol {
 		nextSession := session.GlobalSessionManager.GetById(sessionId)
 		if nextSession == nil {
@@ -445,6 +461,11 @@ func (api SessionApi) SessionRmEndpoint(c echo.Context) error {
 	}
 	// 文件夹或者文件
 	file := c.FormValue("file")
+
+	// 记录日志
+	account, _ := GetCurrentAccount(c)
+	_ = service.StorageLogService.Save(context.Background(), s.AssetId, sessionId, account.ID, constant.StorageLogActionRm, file)
+
 	if "ssh" == s.Protocol {
 		nextSession := session.GlobalSessionManager.GetById(sessionId)
 		if nextSession == nil {
@@ -502,6 +523,11 @@ func (api SessionApi) SessionRenameEndpoint(c echo.Context) error {
 	}
 	oldName := c.QueryParam("oldName")
 	newName := c.QueryParam("newName")
+
+	// 记录日志
+	account, _ := GetCurrentAccount(c)
+	_ = service.StorageLogService.Save(context.Background(), s.AssetId, sessionId, account.ID, constant.StorageLogActionRename, oldName)
+
 	if "ssh" == s.Protocol {
 		nextSession := session.GlobalSessionManager.GetById(sessionId)
 		if nextSession == nil {
@@ -544,6 +570,26 @@ func (api SessionApi) SessionRecordingEndpoint(c echo.Context) error {
 
 	http.ServeFile(c.Response(), c.Request(), recording)
 	return nil
+}
+
+func (api SessionApi) SessionCommandPagingEndpoint(c echo.Context) error {
+	pageIndex, _ := strconv.Atoi(c.QueryParam("pageIndex"))
+	pageSize, _ := strconv.Atoi(c.QueryParam("pageSize"))
+	sessionId := c.Param("id")
+
+	command := c.QueryParam("command")
+	order := c.QueryParam("order")
+	field := c.QueryParam("field")
+
+	items, total, err := repository.SessionCommandRepository.Find(context.TODO(), pageIndex, pageSize, sessionId, command, order, field)
+	if err != nil {
+		return err
+	}
+
+	return Success(c, maps.Map{
+		"total": total,
+		"items": items,
+	})
 }
 
 func (api SessionApi) SessionGetEndpoint(c echo.Context) error {
