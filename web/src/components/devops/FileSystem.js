@@ -9,9 +9,7 @@ import {
     notification,
     Popconfirm,
     Progress,
-    Skeleton,
     Space,
-    Spin,
     Table,
     Tooltip,
     Typography
@@ -646,7 +644,7 @@ class FileSystem extends Component {
                                             let rowKeys = this.state.selectedRowKeys;
                                             const content = <div>
                                                 您确定要删除选中的<Text style={{color: '#1890FF'}}
-                                                               strong>{rowKeys.length}</Text>条记录吗？
+                                                                        strong>{rowKeys.length}</Text>条记录吗？
                                             </div>;
                                             confirm({
                                                 icon: <ExclamationCircleOutlined/>,
@@ -847,6 +845,9 @@ class FileSystem extends Component {
                             }}
                             editorDidMount={(editor, monaco) => {
                                 editor.focus();
+                            }}
+                            editorWillUnmount={() => {
+
                             }}
                             onChange={(newValue, e) => {
                                 this.setState(

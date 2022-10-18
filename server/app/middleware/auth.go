@@ -1,14 +1,16 @@
 package middleware
 
 import (
-	"github.com/labstack/echo/v4"
-	"github.com/ucarion/urlpath"
+	"strings"
+
 	"next-terminal/server/api"
 	"next-terminal/server/constant"
 	"next-terminal/server/dto"
 	"next-terminal/server/global/cache"
 	"next-terminal/server/service"
-	"strings"
+
+	"github.com/labstack/echo/v4"
+	"github.com/ucarion/urlpath"
 )
 
 var anonymousUrls = []string{"/login", "/static", "/favicon.ico", "/logo.svg", "/branding"}
@@ -45,6 +47,14 @@ func Auth(next echo.HandlerFunc) echo.HandlerFunc {
 				return next(c)
 			}
 		}
+		// 放行接入相关接口
+		uri = strings.Split(uri, "?")[0]
+		for _, url := range allowUrls {
+			_, ok := url.Match(uri)
+			if ok {
+				return next(c)
+			}
+		}
 
 		token := api.GetToken(c)
 		if token == "" {
@@ -65,15 +75,6 @@ func Auth(next echo.HandlerFunc) echo.HandlerFunc {
 			} else {
 				cache.TokenManager.Set(token, authorization, cache.NotRememberExpiration)
 			}
-		} else if strings.EqualFold(constant.ShareSession, authorization.Type) {
-			uri = strings.Split(uri, "?")[0]
-			for _, url := range allowUrls {
-				_, ok := url.Match(uri)
-				if ok {
-					return next(c)
-				}
-			}
-			return api.Fail(c, 401, "您的登录信息已失效，请重新登录后再试。")
 		}
 
 		if strings.HasPrefix(uri, "/account") {
